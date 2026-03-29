@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.credits.mapper.AccountMapper">
+
+    <select id="searchAccounts" resultType="com.credits.model.entity.Account">
+        SELECT DISTINCT a.*, cb.total_balance AS totalBalance
+        FROM accounts a
+        LEFT JOIN credit_balances cb ON cb.account_id = a.id
+        <if test="q.hasTransactionFilters()">
+            LEFT JOIN (
+                SELECT account_id, MAX(created_at) AS last_dt
+                FROM credit_transactions WHERE type = 'consumption'
+                GROUP BY account_id
+            ) lc ON lc.account_id = a.id
+            LEFT JOIN (
+                SELECT account_id, MAX(created_at) AS last_dt
+                FROM credit_transactions WHERE type = 'purchase'
+                GROUP BY account_id
+            ) lr ON lr.account_id = a.id
+        </if>
+        <where>
+            <if test="q.status != null and q.status != ''">
+                AND a.status = #{q.status}
+            </if>
+            <if test="q.email != null and q.email != ''">
+                AND a.billing_email LIKE CONCAT('%', #{q.email}, '%')
+            </if>
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (a.name LIKE CONCAT('%', #{q.keyword}, '%')
+                  OR a.billing_email LIKE CONCAT('%', #{q.keyword}, '%'))
+            </if>
+            <if test="q.createdFrom != null">
+                AND a.created_at &gt;= #{q.createdFrom}
+            </if>
+            <if test="q.createdTo != null">
+                AND a.created_at &lt;= DATEADD('DAY', 1, #{q.createdTo})
+            </if>
+            <if test="q.lastConsumptionFrom != null">
+                AND lc.last_dt &gt;= #{q.lastConsumptionFrom}
+            </if>
+            <if test="q.lastConsumptionTo != null">
+                AND lc.last_dt &lt;= DATEADD('DAY', 1, #{q.lastConsumptionTo})
+            </if>
+            <if test="q.lastRechargeFrom != null">
+                AND lr.last_dt &gt;= #{q.lastRechargeFrom}
+            </if>
+            <if test="q.lastRechargeTo != null">
+                AND lr.last_dt &lt;= DATEADD('DAY', 1, #{q.lastRechargeTo})
+            </if>
+        </where>
+        <choose>
+            <when test="q.sortBy == 'balance' or q.sortBy == 'totalBalance'">
+                ORDER BY cb.total_balance <if test="q.sortDir == 'asc'">ASC</if><if test="q.sortDir != 'asc'">DESC</if>
+            </when>
+            <when test="q.sortBy == 'name'">
+                ORDER BY a.name <if test="q.sortDir == 'desc'">DESC</if><if test="q.sortDir != 'desc'">ASC</if>
+            </when>
+            <otherwise>
+                ORDER BY a.created_at DESC
+            </otherwise>
+        </choose>
+    </select>
+
+</mapper>

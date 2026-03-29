@@ -1,0 +1,14 @@
+target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.DS_Store
+
+# Frontend build output copied to Spring Boot static resources
+src/main/resources/static/
+
+# Frontend Maven Plugin installed node
+frontend/node/
+frontend/node_modules

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "credits-api",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": ["spring-boot:run"],
+      "port": 8080
+    },
+    {
+      "name": "credits-admin-ui",
+      "runtimeExecutable": "/Users/meta/.nvm/versions/node/v22.22.0/bin/node",
+      "runtimeArgs": ["frontend/dev.mjs"],
+      "port": 5173
+    }
+  ]
+}
