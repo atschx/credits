@@ -33,21 +33,21 @@ function TrendChart({ data }) {
   }
 
   const max = Math.max(...data.map((d) => Number(d.recognizedRevenue)), 1)
-  const barWidth = Math.min(40, Math.floor(600 / data.length) - 8)
+  const chartH = 140
 
   return (
     <div>
-      <div className="flex items-end gap-2 h-40 px-2">
+      <div className="flex items-end gap-2 px-2" style={{ height: chartH }}>
         {data.map((d, i) => {
-          const h = Math.max((Number(d.recognizedRevenue) / max) * 100, 3)
+          const h = Math.max((Number(d.recognizedRevenue) / max) * chartH, 4)
           return (
-            <div key={i} className="flex-1 flex flex-col items-center group relative">
+            <div key={i} className="flex-1 flex flex-col items-center justify-end group relative" style={{ height: chartH }}>
               <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
                 {d.month}: ${USD(d.recognizedRevenue)}
               </div>
               <div
                 className="w-full max-w-[40px] rounded-t bg-blue-500 hover:bg-blue-600 transition-colors"
-                style={{ height: `${h}%` }}
+                style={{ height: h }}
               />
             </div>
           )

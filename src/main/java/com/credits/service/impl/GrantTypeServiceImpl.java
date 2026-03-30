@@ -21,7 +21,21 @@ public class GrantTypeServiceImpl implements GrantTypeService {
 
     @Override
     public List<GrantType> list() {
-        return grantTypeMapper.selectList(new LambdaQueryWrapper<>());
+        List<GrantType> types = grantTypeMapper.selectList(new LambdaQueryWrapper<>());
+        List<java.util.Map<String, Object>> counts = grantTypeMapper.selectGrantCountsByType();
+        java.util.Map<String, long[]> countMap = new java.util.HashMap<>();
+        for (java.util.Map<String, Object> row : counts) {
+            String gtId = (String) row.get("GRANTTYPEID");
+            long total = ((Number) row.get("TOTAL")).longValue();
+            long active = ((Number) row.get("ACTIVE")).longValue();
+            countMap.put(gtId, new long[]{total, active});
+        }
+        for (GrantType gt : types) {
+            long[] c = countMap.getOrDefault(gt.getId(), new long[]{0, 0});
+            gt.setGrantCount(c[0]);
+            gt.setActiveGrantCount(c[1]);
+        }
+        return types;
     }
 
     @Override
