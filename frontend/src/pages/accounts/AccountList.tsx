@@ -205,8 +205,8 @@ export default function AccountList() {
           >
             <option value="">全部状态 All</option>
             <option value="active">正常 Active</option>
-            <option value="suspended">已停用 Suspended</option>
-            <option value="closed">已关闭 Closed</option>
+            <option value="suspended">已冻结 Frozen</option>
+            <option value="closed">已注销 Closed</option>
           </select>
           {/* Toggle advanced */}
           <button
@@ -258,12 +258,13 @@ export default function AccountList() {
       </div>
 
       {/* Account list */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow">
         {/* Table header */}
         <div className="grid grid-cols-12 gap-2 px-5 py-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase">
-          <div className="col-span-5"><SortHeader label="客户 Account" field="name" /></div>
-          <div className="col-span-4 text-right"><SortHeader label="余额 Balance" field="totalBalance" /></div>
-          <div className="col-span-3 text-right">创建时间 Created</div>
+          <div className="col-span-4"><SortHeader label="客户 Account" field="name" /></div>
+          <div className="col-span-3">邮箱 Email</div>
+          <div className="col-span-3 text-right"><SortHeader label="余额 Balance" field="totalBalance" /></div>
+          <div className="col-span-2 text-right">创建时间 Created</div>
         </div>
 
         {/* Rows */}
@@ -292,31 +293,34 @@ export default function AccountList() {
                 <div
                   key={acc.id}
                   onClick={() => navigate(`/accounts/${acc.id}`)}
-                  className={`grid grid-cols-12 gap-2 px-5 py-3.5 items-center cursor-pointer hover:bg-gray-50 transition-colors ${acc.status === 'suspended' || acc.status === 'closed' ? 'opacity-50' : ''}`}
+                  className="grid grid-cols-12 gap-2 px-5 py-3.5 items-center cursor-pointer hover:bg-gray-50 transition-colors"
                 >
-                  {/* Account info + status */}
-                  <div className="col-span-5 flex items-center gap-3 min-w-0">
-                    <div className="relative shrink-0">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white ${
-                        acc.status === 'active' ? 'bg-blue-500' : acc.status === 'suspended' ? 'bg-red-400' : 'bg-gray-400'
-                      }`}>
-                        {acc.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${statusDot[acc.status] || 'bg-gray-400'}`} />
+                  {/* Account name + status badge */}
+                  <div className="col-span-4 flex items-center gap-3 min-w-0">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${
+                      acc.status === 'active' ? 'bg-blue-500' : acc.status === 'suspended' ? 'bg-amber-500' : 'bg-gray-400'
+                    }`}>
+                      {acc.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-gray-900 truncate">{acc.name}</div>
-                      <div className="text-xs text-gray-400 truncate">{acc.billingEmail}</div>
+                      <div className="mt-0.5">
+                        <StatusBadge status={acc.status} dot showTransitions />
+                      </div>
                     </div>
                   </div>
+                  {/* Email */}
+                  <div className="col-span-3 text-sm text-gray-400 truncate">
+                    {acc.billingEmail}
+                  </div>
                   {/* Balance */}
-                  <div className="col-span-4 text-right">
+                  <div className="col-span-3 text-right">
                     <span className={`text-sm font-mono font-semibold ${bal > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
                       ${USD(bal)}
                     </span>
                   </div>
                   {/* Created */}
-                  <div className="col-span-3 text-right text-sm text-gray-400">
+                  <div className="col-span-2 text-right text-sm text-gray-400">
                     {acc.createdAt ? new Date(acc.createdAt).toLocaleDateString() : '-'}
                   </div>
                 </div>

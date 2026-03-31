@@ -179,30 +179,30 @@ export default function FeeCategoryList() {
         <FormField label="名称 Name" value={form.name} onChange={set('name')} placeholder="如 Platform Fee, Processing Fee" />
 
         <div className="mb-4 grid grid-cols-2 gap-3">
-          <div className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+          <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
             form.isRevenue ? 'border-green-300 bg-green-50' : 'border-gray-200'
-          }`} onClick={() => setForm((f) => ({ ...f, isRevenue: !f.isRevenue }))}>
-            <label className="relative inline-flex items-center cursor-pointer">
+          }`}>
+            <span className="relative inline-flex items-center">
               <input type="checkbox" checked={form.isRevenue} onChange={set('isRevenue')} className="sr-only peer" />
-              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-            <div>
-              <div className="text-sm font-medium text-gray-700">收入类</div>
-              <div className="text-xs text-gray-400">Revenue</div>
-            </div>
-          </div>
-          <div className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+              <span className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></span>
+            </span>
+            <span>
+              <span className="block text-sm font-medium text-gray-700">收入类</span>
+              <span className="block text-xs text-gray-400">Revenue</span>
+            </span>
+          </label>
+          <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
             form.isRefundable ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
-          }`} onClick={() => setForm((f) => ({ ...f, isRefundable: !f.isRefundable }))}>
-            <label className="relative inline-flex items-center cursor-pointer">
+          }`}>
+            <span className="relative inline-flex items-center">
               <input type="checkbox" checked={form.isRefundable} onChange={set('isRefundable')} className="sr-only peer" />
-              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-            </label>
-            <div>
-              <div className="text-sm font-medium text-gray-700">可退款</div>
-              <div className="text-xs text-gray-400">Refundable</div>
-            </div>
-          </div>
+              <span className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></span>
+            </span>
+            <span>
+              <span className="block text-sm font-medium text-gray-700">可退款</span>
+              <span className="block text-xs text-gray-400">Refundable</span>
+            </span>
+          </label>
         </div>
 
         <FormField label="科目编号 GL Account Code" value={form.glAccountCode} onChange={set('glAccountCode')} placeholder="如 4010-001" />

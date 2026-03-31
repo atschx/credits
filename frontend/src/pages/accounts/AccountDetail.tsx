@@ -178,7 +178,7 @@ const emptyGrantForm: GrantForm = { grantTypeCode: '', amount: '', costBasisPerU
 const LARGE_AMOUNT_THRESHOLD = 50000
 
 type GrantStep = 'form' | 'confirm'
-type BlockConfirmAction = 'suspend' | null
+type BlockConfirmAction = 'suspend' | 'close' | 'reactivate' | null
 
 // ============================================================================
 // AccountDetail
@@ -362,6 +362,8 @@ export default function AccountDetail() {
 
   const isActive = account.status === 'active'
   const isSuspended = account.status === 'suspended'
+  const isClosed = account.status === 'closed'
+  const isInactive = isSuspended || isClosed
 
   return (
     <div className="max-w-7xl">
@@ -372,27 +374,49 @@ export default function AccountDetail() {
         <span className="text-gray-700">{account.name}</span>
       </div>
 
-      {/* Suspended banner */}
+      {/* Status banner */}
       {isSuspended && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-red-700">
-            <span className="font-medium">账户已停用</span>
-            <span className="text-red-500">— 额度消耗已被冻结 Credit consumption blocked</span>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <span className="font-medium">账户已冻结</span>
+            <span className="text-amber-600">— 消耗已暂停，仍可充值额度 Consumption paused, grants allowed</span>
           </div>
-          <button onClick={() => changeAccountStatus('active')} className="text-sm px-3 py-1 bg-white border border-red-300 text-red-700 rounded hover:bg-red-50">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => { setGrantForm(emptyGrantForm); setGrantModal(true) }}
+              className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              授予额度 Grant
+            </button>
+            <button onClick={() => setBlockConfirm('reactivate')} className="text-sm px-3 py-1.5 bg-white border border-amber-300 text-amber-700 rounded hover:bg-amber-50">
+              解冻账户 Reactivate
+            </button>
+            <button onClick={() => setBlockConfirm('close')} className="text-sm px-3 py-1 text-gray-400 hover:text-gray-600">
+              注销 Close
+            </button>
+          </div>
+        </div>
+      )}
+      {isClosed && (
+        <div className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="font-medium">账户已注销</span>
+            <span className="text-gray-500">— 所有操作已终止，余额已冻结 Account terminated, balance frozen</span>
+          </div>
+          <button onClick={() => setBlockConfirm('reactivate')} className="text-sm px-3 py-1.5 bg-white border border-gray-300 text-gray-600 rounded hover:bg-gray-50">
             重新激活 Reactivate
           </button>
         </div>
       )}
 
       {/* Header */}
-      <div className="bg-white rounded-lg shadow mb-6">
+      <div className={`bg-white rounded-lg shadow mb-6 ${isInactive ? 'opacity-40 grayscale' : ''}`}>
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{account.name}</h1>
               <div className="flex items-center gap-3 mt-2 text-sm text-gray-500">
-                <StatusBadge status={account.status} />
+                <StatusBadge status={account.status} dot showTransitions />
                 <span>{account.billingEmail}</span>
                 <span className="text-gray-300">|</span>
                 <span>注册于 {new Date(account.createdAt).toLocaleDateString()}</span>
@@ -410,22 +434,28 @@ export default function AccountDetail() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {isActive && (
+            {isActive && (
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => setBlockConfirm('suspend')}
-                  className="px-3 py-2 text-sm border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                  className="px-3 py-2 text-sm border border-amber-300 text-amber-600 rounded-md hover:bg-amber-50"
                 >
-                  停用账户 Suspend
+                  冻结账户 Freeze
                 </button>
-              )}
-              <button
-                onClick={() => { setGrantForm(emptyGrantForm); setGrantModal(true) }}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-              >
-                授予额度 Grant
-              </button>
-            </div>
+                <button
+                  onClick={() => setBlockConfirm('close')}
+                  className="px-3 py-2 text-sm border border-gray-300 text-gray-500 rounded-md hover:bg-gray-50"
+                >
+                  注销账户 Close
+                </button>
+                <button
+                  onClick={() => { setGrantForm(emptyGrantForm); setGrantModal(true) }}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+                >
+                  授予额度 Grant
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -502,7 +532,7 @@ export default function AccountDetail() {
       </div>
 
       {/* Credit Grants */}
-      <div className="mb-6">
+      <div className={`mb-6 ${isInactive ? 'opacity-40 grayscale' : ''}`}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-gray-900">额度授权 <span className="text-sm font-normal text-gray-400">Credit Grants</span></h2>
           <span className="text-xs text-gray-400">{activeGrants.length} 有效 / {allGrants.length} 总计</span>
@@ -535,7 +565,7 @@ export default function AccountDetail() {
       </div>
 
       {/* Transactions */}
-      <div>
+      <div className={isInactive ? 'opacity-40 grayscale' : ''}>
         <h2 className="text-lg font-semibold text-gray-900 mb-3">交易记录 <span className="text-sm font-normal text-gray-400">Transactions</span></h2>
         <DataTable
           columns={txColumns}
@@ -658,14 +688,34 @@ export default function AccountDetail() {
         )}
       </Modal>
 
-      {/* Suspend Confirm */}
+      {/* Freeze Confirm */}
       <ConfirmDialog
         isOpen={blockConfirm === 'suspend'}
         onClose={() => setBlockConfirm(null)}
         onConfirm={() => changeAccountStatus('suspended')}
-        title="停用账户 Suspend Account"
-        message={`确定要停用"${account.name}"吗？停用后该账户将无法消耗额度，但余额将被保留，可随时重新激活。`}
-        confirmLabel="确认停用 Confirm"
+        title="冻结账户 Freeze Account"
+        message={`确定要冻结"${account.name}"吗？冻结后额度消耗和 API 调用将被暂停，但仍可为该账户充值额度。余额将被保留，可随时解冻恢复。`}
+        confirmLabel="确认冻结 Freeze"
+      />
+
+      {/* Close Confirm */}
+      <ConfirmDialog
+        isOpen={blockConfirm === 'close'}
+        onClose={() => setBlockConfirm(null)}
+        onConfirm={() => changeAccountStatus('closed')}
+        title="注销账户 Close Account"
+        message={`确定要注销"${account.name}"吗？注销后所有操作将被永久终止——不可消耗、不可充值、不可调用 API。${balance && balance.totalBalance > 0 ? `\n\n⚠ 该账户当前仍有 ${USD(balance.totalBalance)} 余额，注销后余额将被冻结，无法使用。` : ''}`}
+        confirmLabel="确认注销 Close"
+      />
+
+      {/* Reactivate Confirm */}
+      <ConfirmDialog
+        isOpen={blockConfirm === 'reactivate'}
+        onClose={() => setBlockConfirm(null)}
+        onConfirm={() => changeAccountStatus('active')}
+        title="重新激活账户 Reactivate Account"
+        message={`确定要重新激活"${account.name}"吗？${isClosed ? '该账户已注销，重新激活后将恢复正常状态，所有功能将重新开放。' : '解冻后该账户将恢复正常状态，消耗和 API 调用将重新开放。'}`}
+        confirmLabel="确认激活 Reactivate"
       />
     </div>
   )
