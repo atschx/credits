@@ -5,6 +5,7 @@ import com.credits.model.dto.CreditGrantRequest;
 import com.credits.model.dto.RefundRequest;
 import com.credits.model.entity.CreditGrant;
 import com.credits.model.entity.CreditTransaction;
+import com.credits.model.entity.TransactionLineItem;
 
 import java.util.List;
 
@@ -21,4 +22,6 @@ public interface CreditService {
     long getTransactionCount(String accountId);
 
     List<CreditGrant> getGrantsByAccount(String accountId);
+
+    List<TransactionLineItem> getLineItems(String transactionId);
 }

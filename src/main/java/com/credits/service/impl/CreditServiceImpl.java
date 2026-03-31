@@ -304,6 +304,13 @@ public class CreditServiceImpl implements CreditService {
         return creditGrantMapper.selectByAccountOrderByCreated(accountId);
     }
 
+    @Override
+    public List<TransactionLineItem> getLineItems(String transactionId) {
+        return lineItemMapper.selectList(
+                new LambdaQueryWrapper<TransactionLineItem>()
+                        .eq(TransactionLineItem::getTransactionId, transactionId));
+    }
+
     private BalanceAdjustment resolveBalanceAdjustment(CreditGrant grant, long amount) {
         if (grant == null) {
             return new BalanceAdjustment(amount, 0, 0);

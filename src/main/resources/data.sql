@@ -112,3 +112,38 @@ INSERT INTO credit_transactions (id, account_id, grant_id, type, amount, revenue
 ('ct-018', 'acc-005', 'cg-010', 'promotional',   1000,     0.0000, 'grant-cg-010',        'Launch promotional credits',     '2025-04-01 08:05:00'),
 ('ct-019', 'acc-005', 'cg-011', 'bonus',          1000,     0.0000, 'grant-cg-011',        'Beta tester bonus',              '2025-04-01 08:10:00'),
 ('ct-020', 'acc-005', 'cg-009', 'consumption',  -2000,  2000.0000, 'consume-acc005-001',  'API calls',                      '2025-04-10 11:00:00');
+
+-- 9. Transaction Line Items — breakdown of consumption transactions by fee category
+INSERT INTO transaction_line_items (id, transaction_id, fee_category_id, amount, revenue_impact, label) VALUES
+-- ct-004: 200 Chat Completions (10 base + 2 platform fee = 12 per completion × ~167 completions ≈ 2000)
+('tli-001', 'ct-004', 'fc-001', -1670, 1670.0000, 'Chat Completion base cost'),
+('tli-002', 'ct-004', 'fc-001', -330,   330.0000, 'Platform fee — Chat Completion'),
+-- ct-005: 150 Image Generations (20 base + 5 processing fee = 25 per gen × 60 = 1500)
+('tli-003', 'ct-005', 'fc-002', -1200, 1200.0000, 'Image Generation base cost'),
+('tli-004', 'ct-005', 'fc-002', -300,   300.0000, 'Processing fee — Image Generation'),
+-- ct-006: 100 Embeddings (5 base + 1 platform fee = 6 per 1k tokens × ~83 = 500)
+('tli-005', 'ct-006', 'fc-001', -420,   420.0000, 'Text Embedding base cost'),
+('tli-006', 'ct-006', 'fc-001', -80,     80.0000, 'Platform fee — Text Embedding'),
+-- ct-007: 100 Chat Completions (10 base + 2 platform fee = 12 × ~83 = 1000)
+('tli-007', 'ct-007', 'fc-001', -830,   830.0000, 'Chat Completion base cost'),
+('tli-008', 'ct-007', 'fc-001', -170,   170.0000, 'Platform fee — Chat Completion'),
+-- ct-011: Batch fine-tuning job (50 base + 10 overage fee = 60 × ~83 = 5000)
+('tli-009', 'ct-011', 'fc-003', -4170, 4170.0000, 'Fine-tuning base cost'),
+('tli-010', 'ct-011', 'fc-003', -830,   830.0000, 'Overage fee — Fine-tuning'),
+-- ct-012: API calls + completions mixed (1 api_call × 1000 + 7 completion × ~286 = 3000)
+('tli-011', 'ct-012', 'fc-001', -2000, 2000.0000, 'Chat Completion base cost'),
+('tli-012', 'ct-012', 'fc-001', -286,   286.0000, 'Platform fee — Chat Completion'),
+('tli-013', 'ct-012', 'fc-001', -714,   714.0000, 'API Call base cost'),
+-- ct-013: Image generation batch (15 base + 3 processing fee = 18 × ~111 = 2000)
+('tli-014', 'ct-013', 'fc-002', -1670, 1670.0000, 'Image Generation base cost'),
+('tli-015', 'ct-013', 'fc-002', -330,   330.0000, 'Processing fee — Image Generation'),
+-- ct-016: Mixed API usage (various actions = 3000)
+('tli-016', 'ct-016', 'fc-001', -1500, 1500.0000, 'Chat Completion base cost'),
+('tli-017', 'ct-016', 'fc-001', -300,   300.0000, 'Platform fee — Chat Completion'),
+('tli-018', 'ct-016', 'fc-002', -800,   800.0000, 'Image Generation base cost'),
+('tli-019', 'ct-016', 'fc-002', -200,   200.0000, 'Processing fee — Image Generation'),
+('tli-020', 'ct-016', 'fc-004', -200,   200.0000, 'Premium Support fee'),
+-- ct-020: API calls (1 per request × 2000)
+('tli-021', 'ct-020', 'fc-001', -1600, 1600.0000, 'API Call base cost'),
+('tli-022', 'ct-020', 'fc-001', -250,   250.0000, 'Platform fee — API Call'),
+('tli-023', 'ct-020', 'fc-004', -150,   150.0000, 'Premium Support fee');

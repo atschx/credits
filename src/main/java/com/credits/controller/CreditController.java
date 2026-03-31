@@ -3,6 +3,7 @@ package com.credits.controller;
 import com.credits.model.dto.*;
 import com.credits.model.entity.CreditGrant;
 import com.credits.model.entity.CreditTransaction;
+import com.credits.model.entity.TransactionLineItem;
 import com.credits.service.CreditService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -58,5 +59,12 @@ public class CreditController {
         List<CreditTransaction> records = creditService.getTransactions(accountId, page, size);
         long total = creditService.getTransactionCount(accountId);
         return ApiResponse.ok(PageResponse.of(records, total, page, size));
+    }
+
+    @GetMapping("/transactions/{transactionId}/line-items")
+    @Operation(summary = "List line items for a transaction")
+    public ApiResponse<List<TransactionLineItem>> listLineItems(
+            @Parameter(description = "Transaction ID") @PathVariable String transactionId) {
+        return ApiResponse.ok(creditService.getLineItems(transactionId));
     }
 }

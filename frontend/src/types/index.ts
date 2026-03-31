@@ -55,6 +55,15 @@ export type TransactionType =
   | 'expiration'
   | 'adjustment'
 
+export interface TransactionLineItem {
+  id: string
+  transactionId: string
+  feeCategoryId: string
+  amount: number
+  revenueImpact: number
+  label: string | null
+}
+
 export interface GrantType {
   id: string
   name: string

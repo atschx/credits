@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type ReactNode } from 'react'
+import { Fragment, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../../api/client'
 import useApi from '../../hooks/useApi'
@@ -7,9 +7,11 @@ import type {
   CreditBalance,
   CreditGrant,
   CreditTransaction,
+  FeeCategory,
   GrantType,
   RateCard,
   PageResult,
+  TransactionLineItem,
   TransactionType,
 } from '../../types'
 import DataTable from '../../components/DataTable'
@@ -191,6 +193,7 @@ export default function AccountDetail() {
   const { data: grants, refetch: refetchGrants } = useApi<CreditGrant[]>(() => api.get('/credits/grants', { params: { accountId: id } }), [id])
   const { data: grantTypes } = useApi<GrantType[]>(() => api.get('/grant-types'))
   const { data: rateCards } = useApi<RateCard[]>(() => api.get('/rate-cards'))
+  const { data: feeCategories } = useApi<FeeCategory[]>(() => api.get('/fee-categories'))
 
   // Grant modal
   const [grantModal, setGrantModal] = useState(false)
@@ -270,6 +273,31 @@ export default function AccountDetail() {
     () => api.get('/credits/transactions', { params: { accountId: id, page: txPage, size: txSize } }),
     [id, txPage]
   )
+
+  // Expandable line items
+  const [expandedTxIds, setExpandedTxIds] = useState<Set<string>>(new Set())
+  const [lineItemsCache, setLineItemsCache] = useState<Record<string, TransactionLineItem[]>>({})
+  const [lineItemsLoading, setLineItemsLoading] = useState<Set<string>>(new Set())
+
+  const feeCategoryMap: Record<string, FeeCategory> = Object.fromEntries((feeCategories || []).map(fc => [fc.id, fc]))
+
+  const toggleLineItems = async (txId: string) => {
+    if (expandedTxIds.has(txId)) {
+      setExpandedTxIds((prev) => { const next = new Set(prev); next.delete(txId); return next })
+      return
+    }
+    setExpandedTxIds((prev) => new Set(prev).add(txId))
+    if (lineItemsCache[txId]) return
+    setLineItemsLoading((prev) => new Set(prev).add(txId))
+    try {
+      const items = await api.get<TransactionLineItem[]>(`/credits/transactions/${txId}/line-items`)
+      setLineItemsCache((prev) => ({ ...prev, [txId]: items }))
+    } catch {
+      setExpandedTxIds((prev) => { const next = new Set(prev); next.delete(txId); return next })
+    } finally {
+      setLineItemsLoading((prev) => { const next = new Set(prev); next.delete(txId); return next })
+    }
+  }
 
   const grantMap: Record<string, CreditGrant> = Object.fromEntries((grants || []).map(g => [g.id, g]))
 
@@ -567,14 +595,99 @@ export default function AccountDetail() {
       {/* Transactions */}
       <div className={isInactive ? 'opacity-40 grayscale' : ''}>
         <h2 className="text-lg font-semibold text-gray-900 mb-3">交易记录 <span className="text-sm font-normal text-gray-400">Transactions</span></h2>
-        <DataTable
-          columns={txColumns}
-          data={txRecords}
-          page={txPage}
-          size={txSize}
-          total={txTotal}
-          onPageChange={setTxPage}
-        />
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="w-8 px-2 py-3" />
+                  {txColumns.map((col) => (
+                    <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{col.header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {txRecords.length === 0 ? (
+                  <tr><td colSpan={txColumns.length + 1} className="px-4 py-8 text-center text-gray-400">暂无数据 No data</td></tr>
+                ) : txRecords.map((tx) => {
+                  const isConsumption = tx.type === 'consumption'
+                  const isExpanded = expandedTxIds.has(tx.id)
+                  const isLoading = lineItemsLoading.has(tx.id)
+                  const items = lineItemsCache[tx.id] || []
+                  return (
+                    <Fragment key={tx.id}>
+                      <tr className={isConsumption ? 'cursor-pointer hover:bg-gray-50' : ''} onClick={isConsumption ? () => toggleLineItems(tx.id) : undefined}>
+                        <td className="px-2 py-3 text-center text-gray-400 text-xs">
+                          {isConsumption && (
+                            <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                          )}
+                        </td>
+                        {txColumns.map((col) => (
+                          <td key={col.key} className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                            {col.render ? col.render((tx as any)[col.key], tx) : (tx as any)[col.key]}
+                          </td>
+                        ))}
+                      </tr>
+                      {isConsumption && isExpanded && (
+                        <tr>
+                          <td colSpan={txColumns.length + 1} className="bg-gray-50 px-0 py-0">
+                            {isLoading ? (
+                              <div className="px-10 py-3 text-xs text-gray-400">加载中...</div>
+                            ) : items.length === 0 ? (
+                              <div className="px-10 py-3 text-xs text-gray-400">无行项目明细 No line items</div>
+                            ) : (
+                              <div className="px-10 py-2">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-gray-400">
+                                      <th className="text-left py-1 font-medium">费用类目 Fee Category</th>
+                                      <th className="text-left py-1 font-medium">说明 Label</th>
+                                      <th className="text-right py-1 font-medium">额度 Credits</th>
+                                      <th className="text-right py-1 font-medium">收入影响 Revenue</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-200">
+                                    {items.map((item) => {
+                                      const fc = feeCategoryMap[item.feeCategoryId]
+                                      return (
+                                        <tr key={item.id}>
+                                          <td className="py-1.5 text-gray-600">
+                                            <span className="inline-flex items-center gap-1.5">
+                                              <span className={`w-1.5 h-1.5 rounded-full ${fc?.isRefundable ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+                                              {fc?.name || item.feeCategoryId.slice(0, 8)}
+                                              {fc && <span className="text-gray-400 font-mono">{fc.code}</span>}
+                                            </span>
+                                          </td>
+                                          <td className="py-1.5 text-gray-500">{item.label || '-'}</td>
+                                          <td className="py-1.5 text-right font-mono text-red-600">{USD(item.amount)}</td>
+                                          <td className="py-1.5 text-right font-mono text-green-600">{USD(item.revenueImpact)}</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {txTotal > 0 && (
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+              <span>第 {(txPage - 1) * txSize + 1}-{Math.min(txPage * txSize, txTotal)} 条，共 {txTotal} 条</span>
+              <div className="flex items-center gap-2">
+                <button disabled={txPage <= 1} onClick={() => setTxPage(txPage - 1)} className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-100">上一页</button>
+                <span>{txPage} / {Math.max(1, Math.ceil(txTotal / txSize))}</span>
+                <button disabled={txPage >= Math.ceil(txTotal / txSize)} onClick={() => setTxPage(txPage + 1)} className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-100">下一页</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Grant Credits Modal — two-step: form → confirm */}
