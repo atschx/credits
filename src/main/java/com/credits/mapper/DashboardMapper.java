@@ -26,8 +26,8 @@ public interface DashboardMapper {
     @Select("""
             SELECT COALESCE(SUM(remaining_amount * cost_basis_per_unit), 0)
             FROM credit_grants
-            WHERE remaining_amount > 0
-              AND (expires_at IS NULL OR expires_at > NOW())
+            WHERE grant_status = 'available'
+              AND sort_expires_at > NOW()
             """)
     BigDecimal sumDeferredRevenue();
 

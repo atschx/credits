@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 import java.math.BigDecimal;
 
@@ -16,6 +17,9 @@ public class RefundRequest {
     private String originalTransactionId;
 
     @NotNull
+    @Pattern(
+            regexp = "customer_request|service_error|policy|other",
+            message = "Reason must be one of: customer_request, service_error, policy, other")
     @Schema(description = "Reason for refund")
     private String reason;
 

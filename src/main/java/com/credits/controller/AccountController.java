@@ -70,7 +70,7 @@ public class AccountController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Update an account")
-    public ApiResponse<Account> updateAccount(@PathVariable String id, @RequestBody AccountUpdateRequest request) {
+    public ApiResponse<Account> updateAccount(@PathVariable String id, @Valid @RequestBody AccountUpdateRequest request) {
         return ApiResponse.ok(accountService.updateAccount(id, request));
     }
 

@@ -18,6 +18,9 @@ public class CreditGrant {
     private String currency;
     private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
+    private Integer consumptionPriority;
+    private String grantStatus;
+    private LocalDateTime sortExpiresAt;
     private String metadata;
 
     public String getId() { return id; }
@@ -40,6 +43,12 @@ public class CreditGrant {
     public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public Integer getConsumptionPriority() { return consumptionPriority; }
+    public void setConsumptionPriority(Integer consumptionPriority) { this.consumptionPriority = consumptionPriority; }
+    public String getGrantStatus() { return grantStatus; }
+    public void setGrantStatus(String grantStatus) { this.grantStatus = grantStatus; }
+    public LocalDateTime getSortExpiresAt() { return sortExpiresAt; }
+    public void setSortExpiresAt(LocalDateTime sortExpiresAt) { this.sortExpiresAt = sortExpiresAt; }
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }
 }

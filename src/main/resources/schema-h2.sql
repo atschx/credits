@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS grant_types (
     accounting_treatment TEXT           NULL,
     default_expiry_days INT             NOT NULL DEFAULT 365,
     PRIMARY KEY (id),
-    CONSTRAINT uk_grant_types_code UNIQUE (code)
+    CONSTRAINT uk_grant_types_code UNIQUE (code),
+    CONSTRAINT ck_grant_types_default_expiry_days CHECK (default_expiry_days > 0)
 );
 
 CREATE TABLE IF NOT EXISTS fee_categories (
@@ -31,7 +32,8 @@ CREATE TABLE IF NOT EXISTS rate_cards (
     status          VARCHAR(20)     NOT NULL DEFAULT 'draft',
     effective_from  TIMESTAMP       NOT NULL,
     effective_to    TIMESTAMP       NULL,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    CONSTRAINT ck_rate_cards_status CHECK (status IN ('draft', 'active', 'archived'))
 );
 CREATE INDEX IF NOT EXISTS idx_rc_status_effective ON rate_cards (status, effective_from, effective_to);
 
@@ -47,7 +49,9 @@ CREATE TABLE IF NOT EXISTS rate_card_items (
     PRIMARY KEY (id),
     CONSTRAINT uk_rci_card_action UNIQUE (rate_card_id, action_code),
     CONSTRAINT fk_rci_rate_card FOREIGN KEY (rate_card_id) REFERENCES rate_cards (id),
-    CONSTRAINT fk_rci_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id)
+    CONSTRAINT fk_rci_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id),
+    CONSTRAINT ck_rate_card_items_base_credit_cost CHECK (base_credit_cost >= 0),
+    CONSTRAINT ck_rate_card_items_fee_credit_cost CHECK (fee_credit_cost >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
@@ -58,7 +62,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     status          VARCHAR(20)     NOT NULL DEFAULT 'active',
     created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    CONSTRAINT fk_accounts_rate_card FOREIGN KEY (rate_card_id) REFERENCES rate_cards (id)
+    CONSTRAINT fk_accounts_rate_card FOREIGN KEY (rate_card_id) REFERENCES rate_cards (id),
+    CONSTRAINT ck_accounts_status CHECK (status IN ('active', 'suspended', 'closed'))
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_rate_card ON accounts (rate_card_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts (status);
@@ -74,13 +79,23 @@ CREATE TABLE IF NOT EXISTS credit_grants (
     currency            CHAR(3)     NOT NULL DEFAULT 'USD',
     expires_at          TIMESTAMP   NULL,
     created_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    consumption_priority TINYINT    NOT NULL DEFAULT 2,
+    grant_status        VARCHAR(20) NOT NULL DEFAULT 'available',
+    sort_expires_at     TIMESTAMP   NOT NULL DEFAULT '2038-01-19 03:14:07',
     metadata            CLOB        NULL,
     PRIMARY KEY (id),
     CONSTRAINT fk_cg_account FOREIGN KEY (account_id) REFERENCES accounts (id),
-    CONSTRAINT fk_cg_grant_type FOREIGN KEY (grant_type_id) REFERENCES grant_types (id)
+    CONSTRAINT fk_cg_grant_type FOREIGN KEY (grant_type_id) REFERENCES grant_types (id),
+    CONSTRAINT ck_credit_grants_original_amount CHECK (original_amount > 0),
+    CONSTRAINT ck_credit_grants_remaining_amount CHECK (remaining_amount >= 0),
+    CONSTRAINT ck_credit_grants_remaining_lte_original CHECK (remaining_amount <= original_amount),
+    CONSTRAINT ck_credit_grants_cost_basis CHECK (cost_basis_per_unit >= 0),
+    CONSTRAINT ck_credit_grants_consumption_priority CHECK (consumption_priority IN (0, 1, 2)),
+    CONSTRAINT ck_credit_grants_status CHECK (grant_status IN ('available', 'depleted', 'expired'))
 );
-CREATE INDEX IF NOT EXISTS idx_cg_account_remaining_expires ON credit_grants (account_id, remaining_amount, expires_at);
+CREATE INDEX IF NOT EXISTS idx_cg_account_created ON credit_grants (account_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_cg_grant_type ON credit_grants (grant_type_id);
+CREATE INDEX IF NOT EXISTS idx_cg_consume_pick ON credit_grants (account_id, grant_status, consumption_priority, sort_expires_at, id);
 
 CREATE TABLE IF NOT EXISTS credit_balances (
     id                  CHAR(36)    NOT NULL,
@@ -92,7 +107,14 @@ CREATE TABLE IF NOT EXISTS credit_balances (
     updated_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT uk_cb_account UNIQUE (account_id),
-    CONSTRAINT fk_cb_account FOREIGN KEY (account_id) REFERENCES accounts (id)
+    CONSTRAINT fk_cb_account FOREIGN KEY (account_id) REFERENCES accounts (id),
+    CONSTRAINT ck_credit_balances_total_nonnegative CHECK (total_balance >= 0),
+    CONSTRAINT ck_credit_balances_purchased_nonnegative CHECK (purchased_balance >= 0),
+    CONSTRAINT ck_credit_balances_promotional_nonnegative CHECK (promotional_balance >= 0),
+    CONSTRAINT ck_credit_balances_bonus_nonnegative CHECK (bonus_balance >= 0),
+    CONSTRAINT ck_credit_balances_total_consistent CHECK (
+        total_balance = purchased_balance + promotional_balance + bonus_balance
+    )
 );
 
 CREATE TABLE IF NOT EXISTS credit_transactions (
@@ -108,7 +130,11 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
     PRIMARY KEY (id),
     CONSTRAINT uk_ct_idempotency UNIQUE (idempotency_key),
     CONSTRAINT fk_ct_account FOREIGN KEY (account_id) REFERENCES accounts (id),
-    CONSTRAINT fk_ct_grant FOREIGN KEY (grant_id) REFERENCES credit_grants (id)
+    CONSTRAINT fk_ct_grant FOREIGN KEY (grant_id) REFERENCES credit_grants (id),
+    CONSTRAINT ck_credit_transactions_type CHECK (
+        type IN ('purchase', 'promotional', 'bonus', 'consumption', 'refund', 'expiration', 'adjustment')
+    ),
+    CONSTRAINT ck_credit_transactions_amount_nonzero CHECK (amount <> 0)
 );
 CREATE INDEX IF NOT EXISTS idx_ct_account_created ON credit_transactions (account_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_ct_grant ON credit_transactions (grant_id);
@@ -123,7 +149,8 @@ CREATE TABLE IF NOT EXISTS transaction_line_items (
     label           VARCHAR(200)    NULL,
     PRIMARY KEY (id),
     CONSTRAINT fk_tli_transaction FOREIGN KEY (transaction_id) REFERENCES credit_transactions (id),
-    CONSTRAINT fk_tli_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id)
+    CONSTRAINT fk_tli_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id),
+    CONSTRAINT ck_transaction_line_items_amount_nonzero CHECK (amount <> 0)
 );
 CREATE INDEX IF NOT EXISTS idx_tli_transaction ON transaction_line_items (transaction_id);
 CREATE INDEX IF NOT EXISTS idx_tli_fee_category ON transaction_line_items (fee_category_id);
@@ -138,7 +165,11 @@ CREATE TABLE IF NOT EXISTS refund_records (
     created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_rr_original_txn FOREIGN KEY (original_txn_id) REFERENCES credit_transactions (id),
-    CONSTRAINT fk_rr_refund_txn FOREIGN KEY (refund_txn_id) REFERENCES credit_transactions (id)
+    CONSTRAINT fk_rr_refund_txn FOREIGN KEY (refund_txn_id) REFERENCES credit_transactions (id),
+    CONSTRAINT ck_refund_records_reason CHECK (reason IN ('customer_request', 'service_error', 'policy', 'other')),
+    CONSTRAINT ck_refund_records_pct CHECK (refund_pct >= 0.01 AND refund_pct <= 100.00),
+    CONSTRAINT ck_refund_records_not_self CHECK (original_txn_id <> refund_txn_id),
+    CONSTRAINT uk_rr_refund_txn UNIQUE (refund_txn_id)
 );
 CREATE INDEX IF NOT EXISTS idx_rr_original_txn ON refund_records (original_txn_id);
 CREATE INDEX IF NOT EXISTS idx_rr_refund_txn ON refund_records (refund_txn_id);

@@ -69,6 +69,23 @@ INSERT INTO credit_grants (id, account_id, grant_type_id, source_reference, orig
 ('cg-010', 'acc-005', 'gt-002', 'PROMO-LAUNCH',  1000, 1000,  0.000000, 'USD', '2026-10-01 08:00:00', '2025-04-01 08:05:00'),
 ('cg-011', 'acc-005', 'gt-003', 'BONUS-BETA',    1000, 1000,  0.000000, 'USD', '2026-10-01 08:00:00', '2025-04-01 08:10:00');
 
+UPDATE credit_grants
+SET consumption_priority = CASE grant_type_id
+    WHEN 'gt-002' THEN 0
+    WHEN 'gt-003' THEN 1
+    ELSE 2
+END;
+
+UPDATE credit_grants
+SET sort_expires_at = COALESCE(expires_at, '2038-01-19 03:14:07');
+
+UPDATE credit_grants
+SET grant_status = CASE
+    WHEN remaining_amount <= 0 THEN 'depleted'
+    WHEN sort_expires_at <= CURRENT_TIMESTAMP THEN 'expired'
+    ELSE 'available'
+END;
+
 -- 8. Credit Transactions (1 USD = 1 Credit — revenue_impact = |amount| × cost_basis_per_unit)
 INSERT INTO credit_transactions (id, account_id, grant_id, type, amount, revenue_impact, idempotency_key, description, created_at) VALUES
 -- acc-001: purchased + promotional + bonus

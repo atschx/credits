@@ -15,7 +15,8 @@ CREATE TABLE grant_types (
     default_expiry_days INT        NOT NULL DEFAULT 365,
 
     PRIMARY KEY (id),
-    UNIQUE KEY uk_grant_types_code (code)
+    UNIQUE KEY uk_grant_types_code (code),
+    CONSTRAINT ck_grant_types_default_expiry_days CHECK (default_expiry_days > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信用授予类型字典';
 
 
@@ -42,13 +43,14 @@ CREATE TABLE rate_cards (
     id              CHAR(36)        NOT NULL,
     name            VARCHAR(200)    NOT NULL,
     currency        CHAR(3)         NOT NULL DEFAULT 'USD' COMMENT 'ISO 4217 币种',
-    status          ENUM('draft','active','archived') NOT NULL DEFAULT 'draft',
+    status          VARCHAR(20)     NOT NULL DEFAULT 'draft',
     effective_from  TIMESTAMP       NOT NULL,
     effective_to    TIMESTAMP       NULL                   COMMENT 'NULL 表示无限期有效',
 
     PRIMARY KEY (id),
     -- 查询"当前生效的费率卡"：WHERE status='active' AND effective_from <= NOW() AND (effective_to IS NULL OR effective_to > NOW())
-    KEY idx_rc_status_effective (status, effective_from, effective_to)
+    KEY idx_rc_status_effective (status, effective_from, effective_to),
+    CONSTRAINT ck_rate_cards_status CHECK (status IN ('draft', 'active', 'archived'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费率卡主表';
 
 
@@ -71,7 +73,9 @@ CREATE TABLE rate_card_items (
     KEY idx_rci_fee_category (fee_category_id),
 
     CONSTRAINT fk_rci_rate_card FOREIGN KEY (rate_card_id) REFERENCES rate_cards (id),
-    CONSTRAINT fk_rci_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id)
+    CONSTRAINT fk_rci_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id),
+    CONSTRAINT ck_rate_card_items_base_credit_cost CHECK (base_credit_cost >= 0),
+    CONSTRAINT ck_rate_card_items_fee_credit_cost CHECK (fee_credit_cost >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费率卡明细';
 
 
@@ -83,14 +87,15 @@ CREATE TABLE accounts (
     name            VARCHAR(200)    NOT NULL,
     billing_email   VARCHAR(255)    NULL,
     rate_card_id    CHAR(36)        NULL                   COMMENT '当前关联的费率卡',
-    status          ENUM('active','suspended','closed') NOT NULL DEFAULT 'active',
+    status          VARCHAR(20)     NOT NULL DEFAULT 'active',
     created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     KEY idx_accounts_rate_card (rate_card_id),
     KEY idx_accounts_status (status),
 
-    CONSTRAINT fk_accounts_rate_card FOREIGN KEY (rate_card_id) REFERENCES rate_cards (id)
+    CONSTRAINT fk_accounts_rate_card FOREIGN KEY (rate_card_id) REFERENCES rate_cards (id),
+    CONSTRAINT ck_accounts_status CHECK (status IN ('active', 'suspended', 'closed'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户账户';
 
 
@@ -108,15 +113,25 @@ CREATE TABLE credit_grants (
     currency            CHAR(3)     NOT NULL DEFAULT 'USD',
     expires_at          TIMESTAMP   NULL,
     created_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    consumption_priority TINYINT    NOT NULL DEFAULT 2        COMMENT '消费优先级：0 promotional, 1 bonus, 2 purchased',
+    grant_status        VARCHAR(20) NOT NULL DEFAULT 'available' COMMENT 'available / depleted / expired',
+    sort_expires_at     TIMESTAMP   NOT NULL DEFAULT '2038-01-19 03:14:07' COMMENT '排序用到期时间，NULL 统一映射为远未来',
     metadata            JSON        NULL,
 
     PRIMARY KEY (id),
-    -- 消费时查询：找某账户下"有余额且未过期"的 grants，按 FIFO 消耗
-    KEY idx_cg_account_remaining_expires (account_id, remaining_amount, expires_at),
+    -- 账户额度列表：按账户和创建时间查看授予记录
+    KEY idx_cg_account_created (account_id, created_at, id),
     KEY idx_cg_grant_type (grant_type_id),
+    KEY idx_cg_consume_pick (account_id, grant_status, consumption_priority, sort_expires_at, id),
 
     CONSTRAINT fk_cg_account FOREIGN KEY (account_id) REFERENCES accounts (id),
-    CONSTRAINT fk_cg_grant_type FOREIGN KEY (grant_type_id) REFERENCES grant_types (id)
+    CONSTRAINT fk_cg_grant_type FOREIGN KEY (grant_type_id) REFERENCES grant_types (id),
+    CONSTRAINT ck_credit_grants_original_amount CHECK (original_amount > 0),
+    CONSTRAINT ck_credit_grants_remaining_amount CHECK (remaining_amount >= 0),
+    CONSTRAINT ck_credit_grants_remaining_lte_original CHECK (remaining_amount <= original_amount),
+    CONSTRAINT ck_credit_grants_cost_basis CHECK (cost_basis_per_unit >= 0),
+    CONSTRAINT ck_credit_grants_consumption_priority CHECK (consumption_priority IN (0, 1, 2)),
+    CONSTRAINT ck_credit_grants_status CHECK (grant_status IN ('available', 'depleted', 'expired'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信用授予记录';
 
 
@@ -136,7 +151,14 @@ CREATE TABLE credit_balances (
     -- 账户余额查询：一个账户只有一行
     UNIQUE KEY uk_cb_account (account_id),
 
-    CONSTRAINT fk_cb_account FOREIGN KEY (account_id) REFERENCES accounts (id)
+    CONSTRAINT fk_cb_account FOREIGN KEY (account_id) REFERENCES accounts (id),
+    CONSTRAINT ck_credit_balances_total_nonnegative CHECK (total_balance >= 0),
+    CONSTRAINT ck_credit_balances_purchased_nonnegative CHECK (purchased_balance >= 0),
+    CONSTRAINT ck_credit_balances_promotional_nonnegative CHECK (promotional_balance >= 0),
+    CONSTRAINT ck_credit_balances_bonus_nonnegative CHECK (bonus_balance >= 0),
+    CONSTRAINT ck_credit_balances_total_consistent CHECK (
+        total_balance = purchased_balance + promotional_balance + bonus_balance
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账户 credit 余额快照';
 
 
@@ -147,7 +169,7 @@ CREATE TABLE credit_transactions (
     id              CHAR(36)        NOT NULL,
     account_id      CHAR(36)        NOT NULL,
     grant_id        CHAR(36)        NULL                   COMMENT '扣减的 grant，充值类交易可为 NULL',
-    type            ENUM('purchase','consumption','refund','expiration','adjustment') NOT NULL,
+    type            VARCHAR(20)     NOT NULL,
     amount          BIGINT          NOT NULL               COMMENT '正数=增加，负数=扣减',
     revenue_impact  DECIMAL(12,4)   NOT NULL DEFAULT 0     COMMENT 'amount × cost_basis_per_unit，收入影响金额',
     idempotency_key VARCHAR(200)    NOT NULL               COMMENT '幂等键，防重复提交',
@@ -165,7 +187,11 @@ CREATE TABLE credit_transactions (
     KEY idx_ct_type_created (type, created_at),
 
     CONSTRAINT fk_ct_account FOREIGN KEY (account_id) REFERENCES accounts (id),
-    CONSTRAINT fk_ct_grant FOREIGN KEY (grant_id) REFERENCES credit_grants (id)
+    CONSTRAINT fk_ct_grant FOREIGN KEY (grant_id) REFERENCES credit_grants (id),
+    CONSTRAINT ck_credit_transactions_type CHECK (
+        type IN ('purchase', 'promotional', 'bonus', 'consumption', 'refund', 'expiration', 'adjustment')
+    ),
+    CONSTRAINT ck_credit_transactions_amount_nonzero CHECK (amount <> 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信用交易流水';
 
 
@@ -187,7 +213,8 @@ CREATE TABLE transaction_line_items (
     KEY idx_tli_fee_category (fee_category_id),
 
     CONSTRAINT fk_tli_transaction FOREIGN KEY (transaction_id) REFERENCES credit_transactions (id),
-    CONSTRAINT fk_tli_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id)
+    CONSTRAINT fk_tli_fee_category FOREIGN KEY (fee_category_id) REFERENCES fee_categories (id),
+    CONSTRAINT ck_transaction_line_items_amount_nonzero CHECK (amount <> 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易行项目明细';
 
 
@@ -198,7 +225,7 @@ CREATE TABLE refund_records (
     id              CHAR(36)        NOT NULL,
     original_txn_id CHAR(36)        NOT NULL               COMMENT '原始被退款的交易',
     refund_txn_id   CHAR(36)        NOT NULL               COMMENT '退款产生的新交易',
-    reason          ENUM('customer_request','service_error','policy','other') NOT NULL,
+    reason          VARCHAR(30)     NOT NULL,
     refund_pct      DECIMAL(5,2)    NOT NULL               COMMENT '退款比例 0.00-100.00',
     include_fees    TINYINT(1)      NOT NULL DEFAULT 0     COMMENT '是否连同费用一起退',
     created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -206,10 +233,13 @@ CREATE TABLE refund_records (
     PRIMARY KEY (id),
     -- 查某笔交易的退款历史
     KEY idx_rr_original_txn (original_txn_id),
-    KEY idx_rr_refund_txn (refund_txn_id),
+    UNIQUE KEY uk_rr_refund_txn (refund_txn_id),
 
     CONSTRAINT fk_rr_original_txn FOREIGN KEY (original_txn_id) REFERENCES credit_transactions (id),
-    CONSTRAINT fk_rr_refund_txn FOREIGN KEY (refund_txn_id) REFERENCES credit_transactions (id)
+    CONSTRAINT fk_rr_refund_txn FOREIGN KEY (refund_txn_id) REFERENCES credit_transactions (id),
+    CONSTRAINT ck_refund_records_reason CHECK (reason IN ('customer_request', 'service_error', 'policy', 'other')),
+    CONSTRAINT ck_refund_records_pct CHECK (refund_pct >= 0.01 AND refund_pct <= 100.00),
+    CONSTRAINT ck_refund_records_not_self CHECK (original_txn_id <> refund_txn_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退款记录';
 
 
@@ -224,14 +254,16 @@ CREATE TABLE refund_records (
 --   WHERE a.id = ? AND rci.action_code = ?
 --   → 命中 accounts.PK + uk_rci_card_action
 --
--- 场景 2: FIFO 消耗 — 找账户下有余额且未过期的 grants
---   SELECT id, remaining_amount, cost_basis_per_unit
+-- 场景 2: 优先级消费 — 小批量锁定账户下当前可消费的 grants
+--   SELECT id, grant_type_id, remaining_amount, cost_basis_per_unit
 --   FROM credit_grants
---   WHERE account_id = ? AND remaining_amount > 0
---     AND (expires_at IS NULL OR expires_at > NOW())
---   ORDER BY created_at ASC
+--   WHERE account_id = ?
+--     AND grant_status = 'available'
+--     AND sort_expires_at > NOW()
+--   ORDER BY consumption_priority ASC, sort_expires_at ASC, id ASC
+--   LIMIT ?
 --   FOR UPDATE
---   → 命中 idx_cg_account_remaining_expires
+--   → 命中 idx_cg_consume_pick
 --
 -- 场景 3: 幂等校验
 --   SELECT id FROM credit_transactions WHERE idempotency_key = ?
@@ -249,7 +281,12 @@ CREATE TABLE refund_records (
 --   GROUP BY month, gt.code
 --   → 命中 idx_ct_type_created + idx_cg_grant_type
 --
--- 场景 5: 账户交易流水分页
+-- 场景 5: 账户 grant 列表
+--   SELECT * FROM credit_grants
+--   WHERE account_id = ? ORDER BY created_at ASC, id ASC
+--   → 命中 idx_cg_account_created
+--
+-- 场景 6: 账户交易流水分页
 --   SELECT * FROM credit_transactions
 --   WHERE account_id = ? ORDER BY created_at DESC LIMIT 20 OFFSET 0
 --   → 命中 idx_ct_account_created（降序扫描）
